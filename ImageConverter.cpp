@@ -37,6 +37,7 @@ void ImageData::getHexChunk(std::map<string, string>& chunk)
     getSmallHexChunk(chunkType, 4);
     chunk["type"] = chunkType;
 
+    // IEND has no data, need to test this
     getSmallHexChunk(chunkData, getHexValue(chunk["length"]));
     chunk["data"] = chunkData;
 
@@ -48,6 +49,10 @@ void ImageData::getSmallHexChunk(string& returnHex, const int length, int starti
 {
     // If len is 1 -> return 2 chars 00, FF, etc.
     // Each hex value has a white space inbetween -> 00 11 -> return 5 chars if len is 2, 8 chars if len is 3
+
+    // If < 0 likely IEND chunk
+    if (length < 1)
+        return;
 
     const int characters = length * 2 + (length - 1);
 
@@ -76,31 +81,38 @@ void ImageData::getSmallHexChunk(string &returnHex, const string &chunk, const i
     returnHex = chunk.substr(startingPoint, characters);
 }
 
-void ImageData::getChunkData(string &data, string &type, std::map<string, string> &chunkData)
+void ImageData::getChunkData(const string &chunk, const string &type, std::map<string, string> &chunkData)
 {
     if (type == hexIHDR)
     {
         string width, height, bitDepth, colourType, compression, filter, interlace;
-        getSmallHexChunk(width, data, 4);
+        getSmallHexChunk(width, chunk, 4);
         chunkData["width"] = width;
-        getSmallHexChunk(height, data, 4, 4);
+        getSmallHexChunk(height, chunk, 4, 4);
 
         chunkData["height"] = height;
-        getSmallHexChunk(bitDepth, data, 1, 8);
+        getSmallHexChunk(bitDepth, chunk, 1, 8);
 
         chunkData["bitDepth"] = bitDepth;
-        getSmallHexChunk(colourType, data, 1, 9);
+        getSmallHexChunk(colourType, chunk, 1, 9);
 
         chunkData["colourType"] = colourType;
-        getSmallHexChunk(compression, data, 1, 10);
+        getSmallHexChunk(compression, chunk, 1, 10);
 
         chunkData["compression"] = compression;
-        getSmallHexChunk(filter, data, 1, 11);
+        getSmallHexChunk(filter, chunk, 1, 11);
 
         chunkData["filter"] = filter;
-        getSmallHexChunk(interlace, data, 1, 12);
+        getSmallHexChunk(interlace, chunk, 1, 12);
 
         chunkData["interlace"] = interlace;
+    }
+
+    else if (type == hexsRGB)
+    {
+        string renderingIntent;
+        getSmallHexChunk(renderingIntent, chunk, 1);
+        chunkData["renderingIntent"] = renderingIntent;
     }
 
     else if (type == hexIDAT)
@@ -110,12 +122,43 @@ void ImageData::getChunkData(string &data, string &type, std::map<string, string
 
     else if (type == hexIEND)
     {
-
+        return;
     }
 
     else
     {
         cout << "Invalid chunk type: " << type << endl;
+        exit(-1);
+    }
+}
+
+void ImageData::displayChunk(std::map<string, string> &chunk, std::map<string, string> &chunkData)
+{
+    if (chunk["type"] == hexIHDR)
+    {
+        cout << "Chunk size: " << chunk["length"] << " (" << getHexValue(chunk["length"]) << ")" << " Chunk type: " << chunk["type"]  << (chunk["type"] == hexIHDR ? " (IHDR)" : "") << endl;
+        cout << "Width: " << chunkData["width"] << " (" << getHexValue(chunkData["width"]) << ")" << " Height: " << chunkData["height"] << " (" << getHexValue(chunkData["height"]) << ")" << " Bit depth: " << chunkData["bitDepth"] << " Colour type: " << chunkData["colourType"] << " (" << colourType.find(getHexValue(chunkData["colourType"]))->second << ")" << " Compression: " << chunkData["compression"] << " Filter: " << chunkData["filter"] << " Interlace: " << chunkData["interlace"] << endl;
+        cout << "CRC: " << chunk["CRC"] << endl;
+    }
+
+    else if (chunk["type"] == hexsRGB)
+    {
+
+    }
+
+    else if (chunk["type"] == hexIDAT)
+    {
+
+    }
+
+    else if (chunk["type"] == hexIEND)
+    {
+
+    }
+
+    else
+    {
+        cout << "Invalid chunk type: " << chunk["type"] << endl;
         exit(-1);
     }
 }

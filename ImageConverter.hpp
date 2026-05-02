@@ -17,6 +17,7 @@ using std::endl;
 inline const string pngSignature = "89 50 4e 47 0d 0a 1a 0a";
 
 static const string hexIHDR = "49 48 44 52";
+static const string hexsRGB = "73 52 47 42";
 static const string hexIDAT = "49 44 41 54";
 static const string hexIEND = "49 45 4e 44";
 
@@ -48,7 +49,13 @@ struct ImageData
     /// <param name="startingPoint">: Starting position of the chunk, defaults to 0</param>
     static void getSmallHexChunk( string& returnHex, const string& chunk, int length, int startingPoint = 0);
 
-    void getChunkData(string& data, string& type, std::map<string, string>& chunkData);
+    /// <summary>Used to retrieve the data of a chunk</summary>
+    /// <param name="chunk">: The chunk to search for data</param>
+    /// <param name="type">: The chunk type to know what data to search for</param>
+    /// <param name="chunkData">: Stores all the data found from the chunk</param>
+    static void getChunkData(const string& chunk, const string& type, std::map<string, string>& chunkData);
+
+    static void displayChunk(std::map<string, string>& chunk, std::map<string, string>& chunkData);
 
     /// <summary>Returns the decimal value of the passed hex string</summary>
     /// <param name="hexChunk">: The hex chunk you want the value of</param>
