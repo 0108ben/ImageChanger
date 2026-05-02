@@ -8,7 +8,7 @@
 
 #include "main.hpp"
 
-void ImageData::convertImageToHex(const string& imageLocation, string& hexString)
+void ImageData::convertImageToHex(const string& imageLocation)
 {
     ifstream imageOne(imageLocation, std::ios::binary);
 
@@ -25,14 +25,14 @@ void ImageData::convertImageToHex(const string& imageLocation, string& hexString
     hexString = ss.str();
 }
 
-void ImageData::getHexChunk(const string &hexString, const int length, string &returnHex)
+void ImageData::getHexChunk(const int length, string &returnHex)
 {
     // If len is 1 -> return 2 chars 00, FF, etc.
-    // Each hex value as a white space inbetween -> 00 11 -> return 5 chars if len is 2, 8 chars if len is 3
+    // Each hex value has a white space inbetween -> 00 11 -> return 5 chars if len is 2, 8 chars if len is 3
 
     const int characters = length * 2 + (length - 1);
 
-    returnHex = hexString.substr(this->currentPos, characters);
+    returnHex = hexString.substr(currentPos, characters);
 
     currentPos += characters + 1;
 }
