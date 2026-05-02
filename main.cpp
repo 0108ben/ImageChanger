@@ -6,21 +6,19 @@ int main()
 
     imageData.convertImageToHex(imageLocationOne);
 
-    string signature, chunkSize, chunkType, chunkData, CRC;
+    string signature;
 
     // Signature
-    imageData.getHexChunk(8, signature);
-    // ChunkSize
-    imageData.getHexChunk(4, chunkSize);
-    // ChunkType
-    imageData.getHexChunk(4, chunkType);
-    // ChunkData
-    imageData.getHexChunk(imageData.getHexValue(chunkSize), chunkData);
-    // CRC
-    imageData.getHexChunk(4, CRC);
+    imageData.getSmallHexChunk(signature, 8);
 
-    cout << "Image type: " << signature << (signature == pngSignature ? " (PNG)" : "") << " Chunk size: " << chunkSize << " (" << imageData.getHexValue(chunkSize) << ")" << " Chunk type: " << chunkType  << (chunkType == hexIHDR ? " (IHDR)" : "") << endl;
-    cout << "Chunk data: " << chunkData << endl;
+    std::map<string, string> chunk{};
+    imageData.getHexChunk(chunk);
+
+    std::map<string, string> chunkData{};
+    imageData.getChunkData(chunk["data"], chunk["type"], chunkData);
+
+    cout << "Image type: " << signature << (signature == pngSignature ? " (PNG)" : "") << " Chunk size: " << chunk["length"] << " (" << imageData.getHexValue(chunk["length"]) << ")" << " Chunk type: " << chunk["type"]  << (chunk["type"] == hexIHDR ? " (IHDR)" : "") << endl;
+    cout << "Width: " << chunkData["width"] << " (" << imageData.getHexValue(chunkData["width"]) << ")" << " Height: " << chunkData["height"] << " (" << imageData.getHexValue(chunkData["height"]) << ")" << " Bit depth: " << chunkData["bitDepth"] << " Colour type: " << chunkData["colourType"] << " (" << imageData.colourType.find(imageData.getHexValue(chunkData["colourType"]))->second << ")" << " Compression: " << chunkData["compression"] << " Filter: " << chunkData["filter"] << " Interlace: " << chunkData["interlace"] << endl;
 
     return 0;
 }
