@@ -26,6 +26,10 @@ struct ImageData
 
     static const std::unordered_map<int, string> colourType;
 
+    static const std::unordered_map<int, string> renderingIntent;
+
+    bool endOfBytes = false;
+
     string hexString;
 
     /// <summary>Gets the raw hex bytes of the image</summary>
@@ -55,7 +59,8 @@ struct ImageData
     /// <param name="chunkData">: Stores all the data found from the chunk</param>
     static void getChunkData(const string& chunk, const string& type, std::map<string, string>& chunkData);
 
-    static void displayChunk(std::map<string, string>& chunk, std::map<string, string>& chunkData);
+    /// <summary>Prints out all the info of a chunk to the console</summary>
+    static void displayChunk(std::map<string, string>& chunk);
 
     /// <summary>Returns the decimal value of the passed hex string</summary>
     /// <param name="hexChunk">: The hex chunk you want the value of</param>

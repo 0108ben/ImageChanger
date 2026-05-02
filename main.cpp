@@ -4,6 +4,8 @@ int main()
 {
     ImageData imageData;
 
+    std::vector<std::map<string, string>> chunks{};
+
     imageData.convertImageToHex(imageLocationOne);
 
     string signature;
@@ -11,17 +13,22 @@ int main()
     // Signature
     imageData.getSmallHexChunk(signature, 8);
 
-    std::map<string, string> chunk{};
-    imageData.getHexChunk(chunk);
+    while (!imageData.endOfBytes)
+    {
+        std::map<string, string> chunk{};
+        imageData.getHexChunk(chunk);
 
-    std::map<string, string> chunkData{};
-    imageData.getChunkData(chunk["data"], chunk["type"], chunkData);
+        chunks.push_back({chunk});
+    }
 
     cout << imageData.hexString << endl;
 
     cout << "Image type: " << signature << (signature == pngSignature ? " (PNG)" : "") << endl;
 
-    imageData.displayChunk(chunk, chunkData);
+    for (auto& chunk : chunks)
+    {
+        imageData.displayChunk(chunk);
+    }
 
     return 0;
 }

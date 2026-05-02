@@ -9,6 +9,14 @@ const std::unordered_map<int, string> ImageData::colourType =
     {6, "Truecolour with alpha"}
 };
 
+const std::unordered_map<int, string> ImageData::renderingIntent =
+{
+    {0, "Perceptual"},
+    {1, "Relative colorimetric"},
+    {2, "Saturation"},
+    {3, "Absolute colorimetric"}
+};
+
 
 void ImageData::convertImageToHex(const string& imageLocation)
 {
@@ -43,6 +51,8 @@ void ImageData::getHexChunk(std::map<string, string>& chunk)
 
     getSmallHexChunk(CRC, 4);
     chunk["CRC"] = CRC;
+
+    getChunkData(chunk["data"], chunk["type"], chunk);
 }
 
 void ImageData::getSmallHexChunk(string& returnHex, const int length, int startingPoint)
@@ -66,7 +76,14 @@ void ImageData::getSmallHexChunk(string& returnHex, const int length, int starti
     returnHex = hexString.substr(startingPoint, characters);
 
     if (defaultValue)
+    {
         currentPos += characters + 1;
+
+        if (currentPos == hexString.length())
+        {
+            endOfBytes = true;
+        }
+    }
 }
 
 void ImageData::getSmallHexChunk(string &returnHex, const string &chunk, const int length, int startingPoint)
@@ -110,9 +127,9 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
 
     else if (type == hexsRGB)
     {
-        string renderingIntent;
-        getSmallHexChunk(renderingIntent, chunk, 1);
-        chunkData["renderingIntent"] = renderingIntent;
+        string renderingIntentVal;
+        getSmallHexChunk(renderingIntentVal, chunk, 1);
+        chunkData["renderingIntent"] = renderingIntentVal;
     }
 
     else if (type == hexIDAT)
@@ -132,28 +149,54 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
     }
 }
 
-void ImageData::displayChunk(std::map<string, string> &chunk, std::map<string, string> &chunkData)
+void ImageData::displayChunk(std::map<string, string> &chunk)
 {
+    cout << "\n\n";
+
     if (chunk["type"] == hexIHDR)
     {
-        cout << "Chunk size: " << chunk["length"] << " (" << getHexValue(chunk["length"]) << ")" << " Chunk type: " << chunk["type"]  << (chunk["type"] == hexIHDR ? " (IHDR)" : "") << endl;
-        cout << "Width: " << chunkData["width"] << " (" << getHexValue(chunkData["width"]) << ")" << " Height: " << chunkData["height"] << " (" << getHexValue(chunkData["height"]) << ")" << " Bit depth: " << chunkData["bitDepth"] << " Colour type: " << chunkData["colourType"] << " (" << colourType.find(getHexValue(chunkData["colourType"]))->second << ")" << " Compression: " << chunkData["compression"] << " Filter: " << chunkData["filter"] << " Interlace: " << chunkData["interlace"] << endl;
+        cout << "Chunk size: " << chunk["length"] << " (" << getHexValue(chunk["length"]) << ")" << endl;
+        cout << "Chunk type: " << chunk["type"]  << " (IHDR)" << endl;
+
+        cout << "Width: " << chunk["width"] << " (" << getHexValue(chunk["width"]) << ")" << endl;
+        cout << "Height: " << chunk["height"] << " (" << getHexValue(chunk["height"]) << ")" << endl;
+        cout << "Bit depth: " << chunk["bitDepth"] << endl;
+        cout << "Colour type: " << chunk["colourType"] << " (" << colourType.find(getHexValue(chunk["colourType"]))->second << ")" << endl;
+        cout << "Compression: " << chunk["compression"] << endl;
+        cout << "Filter: " << chunk["filter"] << endl;
+        cout << "Interlace: " << chunk["interlace"] << endl;
+
         cout << "CRC: " << chunk["CRC"] << endl;
     }
 
     else if (chunk["type"] == hexsRGB)
     {
+        cout << "Chunk size: " << chunk["length"] << " (" << getHexValue(chunk["length"]) << ")" << endl;
+        cout << "Chunk type: " << chunk["type"]  << " (sRGB)" << endl;
 
+        cout << "Rendering Intent: " << chunk["renderingIntent"] << " (" << renderingIntent.find(getHexValue(chunk["renderingIntent"]))->second << ") " << endl;
+
+        cout << "CRC: " << chunk["CRC"] << endl;
     }
 
     else if (chunk["type"] == hexIDAT)
     {
+        cout << "Chunk size: " << chunk["length"] << " (" << getHexValue(chunk["length"]) << ")" << endl;
+        cout << "Chunk type: " << chunk["type"]  << " (IDAT)" << endl;
 
+        cout << "Image Info: " << chunk["data"] << endl;
+
+        cout << "CRC: " << chunk["CRC"] << endl;
     }
 
     else if (chunk["type"] == hexIEND)
     {
+        cout << "Chunk size: " << chunk["length"] << " (" << getHexValue(chunk["length"]) << ")" << endl;
+        cout << "Chunk type: " << chunk["type"]  << " (IEND)" << endl;
 
+        cout << "Data: " << "NO DATA (IEND)" << endl;
+
+        cout << "CRC: " << chunk["CRC"] << endl;
     }
 
     else
