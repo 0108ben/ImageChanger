@@ -4,4 +4,4 @@
 
 int main();
 
-inline const string imageLocationOne = "Images/image1.png";
+inline const string imageLocationOne = "Images/image2.png";

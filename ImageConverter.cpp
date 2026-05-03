@@ -52,7 +52,11 @@ void ImageData::getHexChunk(std::map<string, string>& chunk)
     getSmallHexChunk(CRC, 4);
     chunk["CRC"] = CRC;
 
-    getChunkData(chunk["data"], chunk["type"], chunk);
+    if (chunkType == hextEXt)
+        getChunkData(chunk["data"], chunk["type"], chunk, getHexValue(chunkLength));
+
+    else
+        getChunkData(chunk["data"], chunk["type"], chunk);
 }
 
 void ImageData::getSmallHexChunk(string& returnHex, const int length, int startingPoint)
@@ -86,50 +90,67 @@ void ImageData::getSmallHexChunk(string& returnHex, const int length, int starti
     }
 }
 
-void ImageData::getSmallHexChunk(string &returnHex, const string &chunk, const int length, int startingPoint)
+void ImageData::getSmallHexChunk(string &returnHex, const string &chunk, const int length, int startingPoint, bool keyword)
 {
-    // If len is 1 -> return 2 chars 00, FF, etc.
-    // Each hex value has a white space inbetween -> 00 11 -> return 5 chars if len is 2, 8 chars if len is 3
+    if (!keyword)
+    {
+        // If len is 1 -> return 2 chars 00, FF, etc.
+        // Each hex value has a white space inbetween -> 00 11 -> return 5 chars if len is 2, 8 chars if len is 3
+        const int characters = length * 2 + (length - 1);
 
-    const int characters = length * 2 + (length - 1);
+        startingPoint *= 3;
 
-    startingPoint *= 3;
+        returnHex = chunk.substr(startingPoint, characters);
+    }
 
-    returnHex = chunk.substr(startingPoint, characters);
+    else
+    {
+        // Size of keyword is not specified, any size between 1-79 bytes, read each byte until a null seperator (00)
+
+        string currentHex;
+
+        int characters = 0;
+
+        while (currentHex = chunk.substr(startingPoint, 2), currentHex != "00")
+        {
+            characters += 1;
+            startingPoint += 3;
+
+            returnHex.append(currentHex + " ");
+        }
+
+        keywordLength = characters;
+        returnHex.erase(returnHex.end()-1);
+    }
 }
 
-void ImageData::getChunkData(const string &chunk, const string &type, std::map<string, string> &chunkData)
+void ImageData::getChunkData(const string &chunk, const string &type, std::map<string, string> &chunkData, const int dataLength)
 {
     if (type == hexIHDR)
     {
-        string width, height, bitDepth, colourType, compression, filter, interlace;
+        string width, height, bitDepth, colourTypeData, compression, filter, interlace;
+
         getSmallHexChunk(width, chunk, 4);
         chunkData["width"] = width;
+
         getSmallHexChunk(height, chunk, 4, 4);
-
         chunkData["height"] = height;
+
         getSmallHexChunk(bitDepth, chunk, 1, 8);
-
         chunkData["bitDepth"] = bitDepth;
-        getSmallHexChunk(colourType, chunk, 1, 9);
 
-        chunkData["colourType"] = colourType;
+        getSmallHexChunk(colourTypeData, chunk, 1, 9);
+        chunkData["colourType"] = colourTypeData;
+        colourTypeVal = getHexValue(colourTypeData);
+
         getSmallHexChunk(compression, chunk, 1, 10);
-
         chunkData["compression"] = compression;
+
         getSmallHexChunk(filter, chunk, 1, 11);
-
         chunkData["filter"] = filter;
+
         getSmallHexChunk(interlace, chunk, 1, 12);
-
         chunkData["interlace"] = interlace;
-    }
-
-    else if (type == hexsRGB)
-    {
-        string renderingIntentVal;
-        getSmallHexChunk(renderingIntentVal, chunk, 1);
-        chunkData["renderingIntent"] = renderingIntentVal;
     }
 
     else if (type == hexIDAT)
@@ -140,6 +161,79 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
     else if (type == hexIEND)
     {
         return;
+    }
+
+    else if (type == hexsRGB)
+    {
+        string renderingIntentVal;
+        getSmallHexChunk(renderingIntentVal, chunk, 1);
+        chunkData["renderingIntent"] = renderingIntentVal;
+    }
+
+    else if (type == hexsBIT)
+    {
+        switch (colourTypeVal)
+        {
+            case 0:
+            {
+                string greyScale;
+                getSmallHexChunk(greyScale, chunk, 1);
+                chunkData["greyScale"] = greyScale;
+                break;
+            }
+
+            case 2: case 3:
+            {
+                string red, green, blue;
+
+                getSmallHexChunk(red, chunk, 1);
+                chunkData["red"] = red;
+                getSmallHexChunk(green, chunk, 1, 1);
+                chunkData["green"] = green;
+                getSmallHexChunk(blue, chunk, 1, 2);
+                chunkData["blue"] = blue;
+                break;
+            }
+
+            case 4:
+            {
+                string greyScale, alpha;
+                getSmallHexChunk(greyScale, chunk, 1);
+                chunkData["greyScale"] = greyScale;
+
+                getSmallHexChunk(alpha, chunk, 1, 1);
+                chunkData["alpha"] = alpha;
+                break;
+            }
+
+            case 6:
+            {
+                string red, green, blue, alpha;
+
+                getSmallHexChunk(red, chunk, 1);
+                chunkData["red"] = red;
+                getSmallHexChunk(green, chunk, 1, 1);
+                chunkData["green"] = green;
+                getSmallHexChunk(blue, chunk, 1, 2);
+                chunkData["blue"] = blue;
+
+                getSmallHexChunk(alpha, chunk, 1, 3);
+                chunkData["alpha"] = alpha;
+                break;
+            }
+        }
+    }
+
+    else if (type == hextEXt)
+    {
+        string keyword, nullSeperator, text;
+
+        getSmallHexChunk(keyword, chunk, 0, 0, true);
+        chunkData["keyword"] = keyword;
+        getSmallHexChunk(nullSeperator, chunk, 1, keywordLength);
+        chunkData["nullSeperator"] = nullSeperator;
+        getSmallHexChunk(text, chunk, dataLength - keywordLength+1, keywordLength+1);
+        chunkData["text"] = text;
     }
 
     else
@@ -161,20 +255,10 @@ void ImageData::displayChunk(std::map<string, string> &chunk)
         cout << "Width: " << chunk["width"] << " (" << getHexValue(chunk["width"]) << ")" << endl;
         cout << "Height: " << chunk["height"] << " (" << getHexValue(chunk["height"]) << ")" << endl;
         cout << "Bit depth: " << chunk["bitDepth"] << endl;
-        cout << "Colour type: " << chunk["colourType"] << " (" << colourType.find(getHexValue(chunk["colourType"]))->second << ")" << endl;
+        cout << "Colour type: " << chunk["colourType"] << " (" << colourType.find(colourTypeVal)->second << ")" << endl;
         cout << "Compression: " << chunk["compression"] << endl;
         cout << "Filter: " << chunk["filter"] << endl;
         cout << "Interlace: " << chunk["interlace"] << endl;
-
-        cout << "CRC: " << chunk["CRC"] << endl;
-    }
-
-    else if (chunk["type"] == hexsRGB)
-    {
-        cout << "Chunk size: " << chunk["length"] << " (" << getHexValue(chunk["length"]) << ")" << endl;
-        cout << "Chunk type: " << chunk["type"]  << " (sRGB)" << endl;
-
-        cout << "Rendering Intent: " << chunk["renderingIntent"] << " (" << renderingIntent.find(getHexValue(chunk["renderingIntent"]))->second << ") " << endl;
 
         cout << "CRC: " << chunk["CRC"] << endl;
     }
@@ -199,6 +283,66 @@ void ImageData::displayChunk(std::map<string, string> &chunk)
         cout << "CRC: " << chunk["CRC"] << endl;
     }
 
+    else if (chunk["type"] == hexsRGB)
+    {
+        cout << "Chunk size: " << chunk["length"] << " (" << getHexValue(chunk["length"]) << ")" << endl;
+        cout << "Chunk type: " << chunk["type"]  << " (sRGB)" << endl;
+
+        cout << "Rendering Intent: " << chunk["renderingIntent"] << " (" << renderingIntent.find(getHexValue(chunk["renderingIntent"]))->second << ") " << endl;
+
+        cout << "CRC: " << chunk["CRC"] << endl;
+    }
+
+    else if (chunk["type"] == hexsBIT)
+    {
+        cout << "Chunk size: " << chunk["length"] << " (" << getHexValue(chunk["length"]) << ")" << endl;
+        cout << "Chunk type: " << chunk["type"]  << " (sBIT)" << endl;
+
+        switch (colourTypeVal)
+        {
+            case 0:
+            {
+                cout << "Grey scale: " << chunk["greyScale"] << endl;
+                break;
+            }
+
+            case 2: case 3:
+            {
+                cout << "Red: " << chunk["red"] << endl;
+                cout << "Green: " << chunk["green"] << endl;
+                cout << "Blue: " << chunk["blue"] << endl;
+                break;
+            }
+
+            case 4:
+            {
+                cout << "Grey scale: " << chunk["greyScale"] << endl;
+                cout << "Alpha: " << chunk["alpha"] << endl;
+                break;
+            }
+
+            case 6:
+            {
+                cout << "Red: " << chunk["red"] << endl;
+                cout << "Green: " << chunk["green"] << endl;
+                cout << "Blue: " << chunk["blue"] << endl;
+                cout << "Alpha: " << chunk["alpha"] << endl;
+                break;
+            }
+        }
+
+        cout << "CRC: " << chunk["CRC"] << endl;
+    }
+
+    else if (chunk["type"] == hextEXt)
+    {
+        cout << "Keyword: " << chunk["keyword"] << " (" << getHexASCII(chunk["keyword"]) << ") " << endl;
+        cout << "Null seperator: " << chunk["nullSeperator"] << endl;
+        cout << "Text: " << chunk["text"] << " (" << getHexASCII(chunk["text"]) << ") " << endl;
+
+        cout << "CRC: " << chunk["CRC"] << endl;
+    }
+
     else
     {
         cout << "Invalid chunk type: " << chunk["type"] << endl;
@@ -212,4 +356,31 @@ int ImageData::getHexValue(const string &hexChunk)
     std::erase_if(hexVal, isspace);
 
     return std::stoi(hexVal, nullptr, 16);
+}
+
+string ImageData::getHexASCII(const string &hexChunk)
+{
+    string asciiChunk;
+
+    for (int i = 0; i < hexChunk.length(); i += 3)
+    {
+        asciiChunk += getHexASCIIValue(hexChunk[i])*16 + getHexASCIIValue(hexChunk[i + 1]);
+    }
+
+    return asciiChunk;
+}
+
+int ImageData::getHexASCIIValue(char hexChar)
+{
+    if (hexChar >= '0' && hexChar <= '9')
+        return hexChar - '0';
+
+    else if (hexChar >= 'a' && hexChar <= 'f')
+        return  hexChar - 'a' + 10;
+
+    else if (hexChar >= 'A' && hexChar <= 'F')
+        return hexChar - 'A' + 10;
+
+    else
+        return -1;
 }
