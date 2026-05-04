@@ -76,6 +76,8 @@ struct ImageData
     /// <param name="hexChunk">: The hex chunk you want the ascii value of</param>
     static string getHexASCII(const string& hexChunk);
 
+    static string getHexBinary(const string& hexChunk);
+
 private:
     int currentPos = 0;
 

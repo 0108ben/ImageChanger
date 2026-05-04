@@ -155,7 +155,24 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
 
     else if (type == hexIDAT)
     {
+        string compressionData, FLG;
 
+        getSmallHexChunk(compressionData, chunk, 1);
+        chunkData["compressionData"] = compressionData;
+
+        compressionData = getHexBinary(compressionData);
+        chunkData["compressionDataBinary"] = compressionData;
+        chunkData["compressionInfo"] = compressionData.substr(0, 4);
+        chunkData["compressionMethod"] = compressionData.substr(4, 4);
+
+        getSmallHexChunk(FLG, chunk, 1, 1);
+        chunkData["FLG"] = FLG;
+
+        FLG = getHexBinary(FLG);
+        chunkData["FLGBinary"] = FLG;
+        chunkData["FCHECK"] = FLG.substr(0, 5);
+        chunkData["FDICT"] = FLG.substr(5, 1);
+        chunkData["FLEVEL"] = FLG.substr(6, 2);
     }
 
     else if (type == hexIEND)
@@ -269,6 +286,14 @@ void ImageData::displayChunk(std::map<string, string> &chunk)
         cout << "Chunk type: " << chunk["type"]  << " (IDAT)" << endl;
 
         cout << "Image Info: " << chunk["data"] << endl;
+        cout << "Compression data: " << chunk["compressionData"] << " (Binary: " << chunk["compressionDataBinary"] << ")" << endl;
+        cout << "Compression info: " << chunk["compressionInfo"] << endl;
+        cout << "Compression method: " << chunk["compressionMethod"] << endl;
+
+        cout << "FLG: " << chunk["FLG"] << " (Binary: " << chunk["FLGBinary"] << ")" << endl;
+        cout << "Check bits: " << chunk["FCHECK"] << " -> (" << getHexValue(chunk["compressionData"]) << "*256 + " << getHexValue(chunk["FLG"]) << ") % 31 = " << (getHexValue(chunk["compressionData"])*256 + getHexValue(chunk["FLG"])) % 31 << endl;
+        cout << "Preset dictionary: " << chunk["FDICT"] << endl;
+        cout << "Compression level: " << chunk["FLEVEL"] << endl;
 
         cout << "CRC: " << chunk["CRC"] << endl;
     }
@@ -383,4 +408,98 @@ int ImageData::getHexASCIIValue(char hexChar)
 
     else
         return -1;
+}
+
+string ImageData::getHexBinary(const string& hexChunk)
+{
+    string binaryChunk;
+
+    for (char c : hexChunk)
+    {
+        switch (c)
+        {
+            case '0':
+            {
+                binaryChunk += "0000";
+                break;
+            }
+            case '1':
+            {
+                binaryChunk += "0001";
+                break;
+            }
+            case '2':
+            {
+                binaryChunk += "0010";
+                break;
+            }
+            case '3':
+            {
+                binaryChunk += "0011";
+                break;
+            }
+            case '4':
+            {
+                binaryChunk += "0100";
+                break;
+            }
+            case '5':
+            {
+                binaryChunk += "0101";
+                break;
+            }
+            case '6':
+            {
+                binaryChunk += "0110";
+                break;
+            }
+            case '7':
+            {
+                binaryChunk += "0111";
+                break;
+            }
+            case '8':
+            {
+                binaryChunk += "1000";
+                break;
+            }
+            case '9':
+            {
+                binaryChunk += "1001";
+                break;
+            }
+            case 'a':
+            {
+                binaryChunk += "1010";
+                break;
+            }
+            case 'b':
+            {
+                binaryChunk += "1011";
+                break;
+            }
+            case 'c':
+            {
+                binaryChunk += "1100";
+                break;
+            }
+            case 'd':
+            {
+                binaryChunk += "1101";
+                break;
+            }
+            case 'e':
+            {
+                binaryChunk += "1110";
+                break;
+            }
+            case 'f':
+            {
+                binaryChunk += "1111";
+                break;
+            }
+        }
+    }
+
+    return binaryChunk;
 }
