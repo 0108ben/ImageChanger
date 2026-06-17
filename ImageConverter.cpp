@@ -1,5 +1,7 @@
 #include "ImageConverter.hpp"
 
+#include <bits/local_lim.h>
+
 const std::unordered_map<int, string> ImageData::colourType =
 {
     {0, "Greyscale"},
@@ -17,6 +19,21 @@ const std::unordered_map<int, string> ImageData::renderingIntent =
     {3, "Absolute colorimetric"}
 };
 
+const std::unordered_map<string, string> ImageData::compressionType =
+{
+    {"00", "Stored"},
+    {"01", "Fixed Huffman"},
+    {"10", "Dynamic Huffman"},
+    {"11", "Reserved/Error"}
+};
+
+const std::array<HuffmanCode, 4> ImageData::huffmanCodes =
+    {{
+        {7, 0b0000000, 0b0010111, 256, 279},
+        {8, 0b00110000, 0b10111111, 0, 143},
+        {8, 0b11000000, 0b11000111, 280, 287},
+        {9, 0b110010000, 0b111111111, 144, 255}
+    }};
 
 void ImageData::convertImageToHex(const string& imageLocation)
 {
@@ -90,23 +107,24 @@ void ImageData::getSmallHexChunk(string& returnHex, const int length, int starti
     }
 }
 
-void ImageData::getSmallHexChunk(string &returnHex, const string &chunk, const int length, int startingPoint, bool keyword)
+int ImageData::getSmallHexChunk(string &returnHex, const string &chunk, const int length, int startingPoint, bool keyword)
 {
+    startingPoint *= 3;
+
     if (!keyword)
     {
         // If len is 1 -> return 2 chars 00, FF, etc.
         // Each hex value has a white space inbetween -> 00 11 -> return 5 chars if len is 2, 8 chars if len is 3
         const int characters = length * 2 + (length - 1);
 
-        startingPoint *= 3;
-
         returnHex = chunk.substr(startingPoint, characters);
+
+        return 0;
     }
 
     else
     {
         // Size of keyword is not specified, any size between 1-79 bytes, read each byte until a null seperator (00)
-
         string currentHex;
 
         int characters = 0;
@@ -119,8 +137,9 @@ void ImageData::getSmallHexChunk(string &returnHex, const string &chunk, const i
             returnHex.append(currentHex + " ");
         }
 
-        keywordLength = characters;
-        returnHex.erase(returnHex.end()-1);
+        returnHex.append("00");
+
+        return characters;
     }
 }
 
@@ -132,6 +151,7 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
 
         getSmallHexChunk(width, chunk, 4);
         chunkData["width"] = width;
+        imageWidth = getHexValue(width);
 
         getSmallHexChunk(height, chunk, 4, 4);
         chunkData["height"] = height;
@@ -155,15 +175,15 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
 
     else if (type == hexIDAT)
     {
-        string compressionData, FLG;
+        string compressionData, FLG, imageData, adlerCheckSum;
 
         getSmallHexChunk(compressionData, chunk, 1);
         chunkData["compressionData"] = compressionData;
 
         compressionData = getHexBinary(compressionData);
         chunkData["compressionDataBinary"] = compressionData;
-        chunkData["compressionInfo"] = compressionData.substr(0, 4);
-        chunkData["compressionMethod"] = compressionData.substr(4, 4);
+        chunkData["windowSize"] = compressionData.substr(0, 4);
+        chunkData["compressionInfo"] = compressionData.substr(4, 4);
 
         getSmallHexChunk(FLG, chunk, 1, 1);
         chunkData["FLG"] = FLG;
@@ -173,6 +193,22 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
         chunkData["FCHECK"] = FLG.substr(0, 5);
         chunkData["FDICT"] = FLG.substr(5, 1);
         chunkData["FLEVEL"] = FLG.substr(6, 2);
+
+        // Get actual image data:
+        int dataLen = getSmallHexChunk(imageData, chunk, 0, 2, true);
+        chunkData["imageData"] = imageData;
+
+        string binaryData = getHexBinary(imageData, true);
+        chunkData["binaryImageData"] = binaryData;
+
+        chunkData["finalBlock"] = binaryData[0]; // 1 = final, 0 = continue
+        chunkData["BTYPE"] = std::string() + binaryData[2] + binaryData[1];
+
+        chunkData["huffmanSequence"] = binaryData.substr(3);
+        readImageDataBinary(chunkData["huffmanSequence"], chunkData["BTYPE"], imageWidth);
+
+        getSmallHexChunk(adlerCheckSum, chunk, 4, dataLen+3); // data length + flg + null
+        chunkData["adlerCheckSum"] = adlerCheckSum;
     }
 
     else if (type == hexIEND)
@@ -245,7 +281,7 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
     {
         string keyword, nullSeperator, text;
 
-        getSmallHexChunk(keyword, chunk, 0, 0, true);
+        int keywordLength = getSmallHexChunk(keyword, chunk, 0, 0, true);
         chunkData["keyword"] = keyword;
         getSmallHexChunk(nullSeperator, chunk, 1, keywordLength);
         chunkData["nullSeperator"] = nullSeperator;
@@ -256,6 +292,244 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
     else
     {
         cout << "Invalid chunk type: " << type << endl;
+        exit(-1);
+    }
+}
+
+void ImageData::readImageDataBinary(string& binaryData, const string& compressionVal, int width)
+{
+    string type = compressionType.find(compressionVal)->second;
+
+    if (type == "Stored")
+    {
+
+    }
+
+    else if (type == "Fixed Huffman")
+    {
+        int bitPos = 0;
+        bool firstBit = true;
+        int rgbLoc = 0;
+        int pixelLoc = 0;
+
+        while (bitPos < binaryData.length())
+        {
+            bool matchedCode = false;
+
+            for (auto& code : huffmanCodes)
+            {
+                string checkBits = binaryData.substr(bitPos, code.bits);
+
+                int bitValue = std::stoi(checkBits, nullptr, 2);
+
+                if (code.minBinary <= bitValue && bitValue <= code.maxBinary)
+                {
+                    matchedCode = true;
+                    bitPos += code.bits;
+                    int symbol = code.minSymbol + (bitValue - code.minBinary);
+
+                    if (symbol == 256)
+                    {
+                        int loc = 0;
+                        int buffer = 0;
+                        std::vector defaultRGBVals{-1, -1, -1, -1};
+
+                        for (auto& val : pixelData)
+                        {
+                            if (loc == 0)
+                            {
+                                buffer = val;
+                                loc++;
+                                continue;
+                            }
+                            if (loc <= 4 && buffer == 1)
+                            {
+                                defaultRGBVals[loc-1] = val;
+                                loc++;
+                            }
+                            else if (buffer == 1)
+                            {
+                                val = defaultRGBVals[(loc - 1) % 4] + val;
+                                loc++;
+                            }
+
+                            if (loc == width*4+1)
+                            {
+                                loc = 0;
+                            }
+                        }
+
+                        loc = 0;
+                        Pixel pixel{};
+                        rgbLoc = 0;
+                        for (auto& val : pixelData)
+                        {
+                            if (loc % (width*4+1) == 0)
+                            {
+                                loc++;
+                                continue;
+                            }
+
+                            switch (rgbLoc)
+                            {
+                                case 0:
+                                {
+                                    pixel.red = val;
+                                    break;
+                                }
+                                case 1:
+                                {
+                                    pixel.green = val;
+                                    break;
+                                }
+                                case 2:
+                                {
+                                    pixel.blue = val;
+                                    break;
+                                }
+                                case 3:
+                                {
+                                    pixel.alpha = val;
+                                    image.push_back(pixel);
+                                    pixel = Pixel();
+                                    rgbLoc = -1;
+                                    break;
+                                }
+                            }
+                            rgbLoc++;
+                            loc++;
+                        }
+
+                        return;
+                    }
+
+                    cout << checkBits << " -> " << symbol << endl;
+
+                    if (firstBit)
+                    {
+                        pixelData.push_back(symbol);
+                        firstBit = false;
+                    }
+
+                    else if (code.bits == 7)
+                    {
+                        // Calculate length
+
+                        int length = 0;
+
+                        if (symbol < 285)
+                        {
+                            int offset = symbol - 257;
+
+                            int extraBits = (offset < 8 || symbol == 285) ? 0 : ((offset - 8)/4) + 1;
+
+                            int extraBitsVal = 0;
+
+                            if (extraBits > 0)
+                            {
+                                extraBitsVal = std::stoi(binaryData.substr(bitPos, extraBits), nullptr, 2);
+                                bitPos += extraBits;
+                            }
+
+                            int bitGroup = (offset - 8) % 4;
+
+                            // << is so useful!!! (Works like: (1 << n) = (1 * 2^n)
+                            length = extraBits == 0 ? 3 + offset : 3 + (1 << (extraBits + 2)) + bitGroup * (1 << extraBits) + extraBitsVal;
+                        }
+                        else
+                        {
+                            length = 258;
+                        }
+
+                        checkBits = binaryData.substr(bitPos, 5);
+                        bitValue = std::stoi(checkBits, nullptr, 2);
+
+                        bitPos += 5;
+
+                        cout << checkBits << " -> " << bitValue << endl;
+
+                        // Calculate distance
+
+                        int distance = bitValue + 1;
+                        if (bitValue >= 4)
+                        {
+                            int extraBits = (bitValue - 4) / 2 + 1;
+
+                            int extraBitsVal = 0;
+                            if (extraBits > 0)
+                            {
+                                extraBitsVal = std::stoi(binaryData.substr(bitPos, extraBits), nullptr, 2);
+                                bitPos += extraBits;
+                            }
+
+                            int bitGroup = (bitValue - 4) % 2;
+
+                            distance = 1 + (1 << (extraBits + 1)) + bitGroup * (1 << extraBits) + extraBitsVal;
+                        }
+
+                        // Add length bytes and move back distance bytes
+
+                        int repeat;
+
+                        for (int i = 0; i < length; i++)
+                        {
+                            repeat = pixelData[pixelData.size()-distance];
+                            pixelData.push_back(repeat);
+                            rgbLoc++;
+                            if (rgbLoc >= 4)
+                            {
+                                rgbLoc = 0;
+                                pixelLoc++;
+                                if (pixelLoc == width)
+                                {
+                                    firstBit = true;
+                                }
+                            }
+                        }
+                    }
+
+                    else
+                    {
+                        pixelData.push_back(symbol);
+                        rgbLoc++;
+
+                        if (rgbLoc >= 4)
+                        {
+                            rgbLoc = 0;
+                            pixelLoc++;
+                            if (pixelLoc == width)
+                            {
+                                firstBit = true;
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+
+            if (!matchedCode)
+            {
+                cout << "Invalid bit string!" << endl;
+                exit(-1);
+            }
+        }
+        cout << "N0 EXIT SYMBOL FOUND, EXITING" << endl;
+        exit(-1);
+    }
+
+    else if (type == "Dynamic Huffman")
+    {
+
+    }
+
+    else if (type == "Reserved/Error")
+    {
+
+    }
+
+    else
+    {
+        cout << "Unknown compression type: " << compressionVal << endl;
         exit(-1);
     }
 }
@@ -286,14 +560,38 @@ void ImageData::displayChunk(std::map<string, string> &chunk)
         cout << "Chunk type: " << chunk["type"]  << " (IDAT)" << endl;
 
         cout << "Image Info: " << chunk["data"] << endl;
+
         cout << "Compression data: " << chunk["compressionData"] << " (Binary: " << chunk["compressionDataBinary"] << ")" << endl;
-        cout << "Compression info: " << chunk["compressionInfo"] << endl;
-        cout << "Compression method: " << chunk["compressionMethod"] << endl;
+        cout << "Compression info: " << chunk["compressionInfo"] << (chunk["compressionInfo"] == "1000" ? " (Deflate)" : " (Unknown)") << endl;
+        cout << "Window size: " << chunk["windowSize"] << " (" << powf(2, getBinaryValue(chunk["windowSize"])+8) << " bytes (2^(windowSize+8))" << endl;
 
         cout << "FLG: " << chunk["FLG"] << " (Binary: " << chunk["FLGBinary"] << ")" << endl;
         cout << "Check bits: " << chunk["FCHECK"] << " -> (" << getHexValue(chunk["compressionData"]) << "*256 + " << getHexValue(chunk["FLG"]) << ") % 31 = " << (getHexValue(chunk["compressionData"])*256 + getHexValue(chunk["FLG"])) % 31 << endl;
         cout << "Preset dictionary: " << chunk["FDICT"] << endl;
         cout << "Compression level: " << chunk["FLEVEL"] << endl;
+
+        cout << "Image Data: " << chunk["imageData"] << endl;
+        cout << "Binary Image Data: " << chunk["binaryImageData"] << endl;
+
+        cout << "Final Image Data Chunk? : " << chunk["finalBlock"] << (chunk["finalBlock"] == "1" ? " (True)" : " (False)") << endl;// 1 = final, 0 = continue
+        cout << "BTYPE: " << chunk["BTYPE"] << " (" << compressionType.find(chunk["BTYPE"])->second << ")" << endl;
+
+        cout << "Huffman Sequence: " << chunk["huffmanSequence"] << endl;
+        cout << "Pixels: " << endl;
+        int counter = 0;
+        for (auto pixel : image)
+        {
+            if (counter == imageWidth)
+            {
+                cout << "New Row: " << endl;
+                counter = 0;
+            }
+
+            cout << "Red: " << pixel.red << " Green: " << pixel.green << " Blue: " << pixel.blue << " Alpha: " << pixel.alpha << endl;
+            counter++;
+        }
+
+        cout << "Adler Checksum: " << chunk["adlerCheckSum"] << endl;
 
         cout << "CRC: " << chunk["CRC"] << endl;
     }
@@ -383,6 +681,11 @@ int ImageData::getHexValue(const string &hexChunk)
     return std::stoi(hexVal, nullptr, 16);
 }
 
+int ImageData::getBinaryValue(const string &binaryChunk)
+{
+    return std::stoi(binaryChunk, nullptr, 2);
+}
+
 string ImageData::getHexASCII(const string &hexChunk)
 {
     string asciiChunk;
@@ -400,105 +703,292 @@ int ImageData::getHexASCIIValue(char hexChar)
     if (hexChar >= '0' && hexChar <= '9')
         return hexChar - '0';
 
-    else if (hexChar >= 'a' && hexChar <= 'f')
+    if (hexChar >= 'a' && hexChar <= 'f')
         return  hexChar - 'a' + 10;
 
-    else if (hexChar >= 'A' && hexChar <= 'F')
+    if (hexChar >= 'A' && hexChar <= 'F')
         return hexChar - 'A' + 10;
 
-    else
-        return -1;
+    return -1;
 }
 
-string ImageData::getHexBinary(const string& hexChunk)
+string ImageData::getHexBinary(const string& hexChunk, bool LSB)
 {
     string binaryChunk;
+    string LSBHolder;
+
+    int count = 0;
 
     for (char c : hexChunk)
     {
         switch (c)
         {
+            // If more than 1 byte is being calculated
+            case ' ':
+            {
+                count--;
+                break;
+            }
+
             case '0':
             {
-                binaryChunk += "0000";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "0000";
+                    else
+                    {
+                        binaryChunk += "0000";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "0000";
+
                 break;
             }
             case '1':
             {
-                binaryChunk += "0001";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "1000";
+                    else
+                    {
+                        binaryChunk += "1000";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "0001";
                 break;
             }
             case '2':
             {
-                binaryChunk += "0010";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "0100";
+                    else
+                    {
+                        binaryChunk += "0100";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "0010";
                 break;
             }
             case '3':
             {
-                binaryChunk += "0011";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "1100";
+                    else
+                    {
+                        binaryChunk += "1100";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "0011";
                 break;
             }
             case '4':
             {
-                binaryChunk += "0100";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "0010";
+                    else
+                    {
+                        binaryChunk += "0010";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "0100";
                 break;
             }
             case '5':
             {
-                binaryChunk += "0101";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "1010";
+                    else
+                    {
+                        binaryChunk += "1010";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "0101";
                 break;
             }
             case '6':
             {
-                binaryChunk += "0110";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "0110";
+                    else
+                    {
+                        binaryChunk += "0110";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "0110";
                 break;
             }
             case '7':
             {
-                binaryChunk += "0111";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "1110";
+                    else
+                    {
+                        binaryChunk += "1110";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "0111";
                 break;
             }
             case '8':
             {
-                binaryChunk += "1000";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "0001";
+                    else
+                    {
+                        binaryChunk += "0001";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "1000";
                 break;
             }
             case '9':
             {
-                binaryChunk += "1001";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "1001";
+                    else
+                    {
+                        binaryChunk += "1001";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "1001";
                 break;
             }
             case 'a':
             {
-                binaryChunk += "1010";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "0101";
+                    else
+                    {
+                        binaryChunk += "0101";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "1010";
                 break;
             }
             case 'b':
             {
-                binaryChunk += "1011";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "1101";
+                    else
+                    {
+                        binaryChunk += "1101";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "1011";
                 break;
             }
             case 'c':
             {
-                binaryChunk += "1100";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "0011";
+                    else
+                    {
+                        binaryChunk += "0011";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "1100";
                 break;
             }
             case 'd':
             {
-                binaryChunk += "1101";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "1011";
+                    else
+                    {
+                        binaryChunk += "1011";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "1101";
                 break;
             }
             case 'e':
             {
-                binaryChunk += "1110";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "0111";
+                    else
+                    {
+                        binaryChunk += "0111";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "1110";
                 break;
             }
             case 'f':
             {
-                binaryChunk += "1111";
+                if (LSB)
+                {
+                    if (count % 2 == 0)
+                        LSBHolder = "1111";
+                    else
+                    {
+                        binaryChunk += "1111";
+                        binaryChunk += LSBHolder;
+                    }
+                }
+                else
+                    binaryChunk += "1111";
                 break;
             }
         }
+        count++;
     }
 
     return binaryChunk;

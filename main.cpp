@@ -26,5 +26,7 @@ int main()
         imageData.displayChunk(chunk);
     }
 
+    cout << imageData.hexString << endl;
+
     return 0;
 }
