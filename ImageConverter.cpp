@@ -35,6 +35,23 @@ const std::array<HuffmanCode, 4> ImageData::huffmanCodes =
         {9, 0b110010000, 0b111111111, 144, 255}
     }};
 
+ImageData::ImageData(const string& imageLocation)
+{
+    convertImageToHex(imageLocation);
+
+    // Signature
+    getSmallHexChunk(signature, 8);
+
+    while (!endOfBytes)
+    {
+        std::map<string, string> chunk{};
+        getHexChunk(chunk);
+
+        chunks.push_back({chunk});
+    }
+}
+
+
 void ImageData::convertImageToHex(const string& imageLocation)
 {
     ifstream imageOne(imageLocation, std::ios::binary);
@@ -333,30 +350,88 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                     {
                         int loc = 0;
                         int buffer = 0;
-                        std::vector defaultRGBVals{-1, -1, -1, -1};
+                        int row = 0;
 
                         for (auto& val : pixelData)
                         {
                             if (loc == 0)
                             {
                                 buffer = val;
+                                cout << "Buffer: " << buffer << endl;
                                 loc++;
                                 continue;
                             }
-                            if (loc <= 4 && buffer == 1)
+
+                            if (buffer == 1)
                             {
-                                defaultRGBVals[loc-1] = val;
+                                int leftVal;
+
+                                if (loc < 5)
+                                    leftVal = 0;
+                                else
+                                    leftVal = pixelData[((imageWidth*4+1)*row) + loc - 4];
+
+                                val = (val + leftVal) % 256;
                                 loc++;
                             }
-                            else if (buffer == 1)
+
+                            else if (buffer == 2)
                             {
-                                val = defaultRGBVals[(loc - 1) % 4] + val;
-                                loc++;
+                                if (row == 0)
+                                    val = val % 256;
+                                else
+                                    val = (val + pixelData[((row-1) * (imageWidth*4+1)) + loc]) % 256;
+                            }
+
+                            else if (buffer == 3 || buffer == 4)
+                            {
+                                int leftVal;
+                                int upperVal;
+
+                                if (loc < 4)
+                                    leftVal = 0;
+                                else
+                                    leftVal = pixelData[((imageWidth*4+1)*row) + loc-4];
+                                if (row == 0)
+                                    upperVal = 0;
+                                else
+                                    upperVal = pixelData[((row-1) * (imageWidth*4+1)) + loc];
+
+                                if (buffer == 3)
+                                {
+                                    val = (val + (int)floor((leftVal + upperVal) / 2.0)) % 256;
+                                }
+                                else
+                                {
+                                    int upperLeftVal;
+
+                                    if (row == 0 || loc < 4)
+                                        upperLeftVal = 0;
+                                    else
+                                        upperLeftVal = pixelData[((row-1) * (imageWidth*4+1)) + loc-4];
+
+                                    // Paeth implementation
+
+                                    int paeth = leftVal + upperVal - upperLeftVal;
+
+                                    int paethLeft = abs(paeth - leftVal);
+                                    int paethUp = abs(paeth - upperVal);
+                                    int paethUpLeft = abs(paeth - upperLeftVal);
+
+                                    if (paethLeft <= paethUp && paethLeft <= paethUpLeft)
+                                        val = (val + paethLeft) % 256;
+                                    else if (paethUp <= paethUpLeft)
+                                        val = (val + paethUp) % 256;
+                                    else
+                                        val = (val + paethUpLeft) % 256;
+                                }
+
                             }
 
                             if (loc == imageWidth*4+1)
                             {
                                 loc = 0;
+                                row++;
                             }
                         }
 
@@ -476,6 +551,13 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                         {
                             repeat = pixelData[pixelData.size()-distance];
                             pixelData.push_back(repeat);
+
+                            if (firstBit)
+                            {
+                                firstBit = false;
+                                continue;
+                            }
+
                             rgbLoc++;
                             if (rgbLoc >= 4)
                             {
@@ -483,6 +565,7 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                                 pixelLoc++;
                                 if (pixelLoc == imageWidth)
                                 {
+                                    pixelLoc = 0;
                                     firstBit = true;
                                 }
                             }
@@ -500,6 +583,7 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                             pixelLoc++;
                             if (pixelLoc == imageWidth)
                             {
+                                pixelLoc = 0;
                                 firstBit = true;
                             }
                         }

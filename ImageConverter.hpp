@@ -60,9 +60,13 @@ struct ImageData
     string hexString;
     std::vector<std::map<string, string>> chunks{};
 
-    int imageWidth;
+    string signature;
+    int imageWidth{};
     std::vector<int> pixelData;
     std::vector<Pixel> image;
+
+
+    explicit ImageData(const string& imageLocation);
 
     /// <summary>Gets the raw hex bytes of the image</summary>
     /// <param name="imageLocation">: Provide the full path to the image</param>

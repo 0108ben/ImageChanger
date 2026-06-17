@@ -1,25 +1,18 @@
 #include "main.hpp"
 
+#include <chrono>
+
 int main()
 {
-    ImageData imageData;
+    auto startTotal = std::chrono::high_resolution_clock::now();
 
-    imageData.convertImageToHex(imageLocationOne);
+    ImageData imageData(imageLocationThree);
 
-    string signature;
+    auto stopTotal = std::chrono::high_resolution_clock::now();
+    auto durationTotal = std::chrono::duration_cast<std::chrono::nanoseconds>(stopTotal - startTotal);
+    cout << "Decryption Time: " << durationTotal.count() << endl;
 
-    // Signature
-    imageData.getSmallHexChunk(signature, 8);
-
-    while (!imageData.endOfBytes)
-    {
-        std::map<string, string> chunk{};
-        imageData.getHexChunk(chunk);
-
-        imageData.chunks.push_back({chunk});
-    }
-
-    cout << "Image type: " << signature << (signature == pngSignature ? " (PNG)" : "") << endl;
+    cout << "Image type: " << imageData.signature << (imageData.signature == pngSignature ? " (PNG)" : "") << endl;
 
     for (auto& chunk : imageData.chunks)
     {
