@@ -205,7 +205,7 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
         chunkData["BTYPE"] = std::string() + binaryData[2] + binaryData[1];
 
         chunkData["huffmanSequence"] = binaryData.substr(3);
-        readImageDataBinary(chunkData["huffmanSequence"], chunkData["BTYPE"], imageWidth);
+        readImageDataBinary(chunkData["huffmanSequence"], chunkData["BTYPE"]);
 
         getSmallHexChunk(adlerCheckSum, chunk, 4, dataLen+3); // data length + flg + null
         chunkData["adlerCheckSum"] = adlerCheckSum;
@@ -296,13 +296,14 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
     }
 }
 
-void ImageData::readImageDataBinary(string& binaryData, const string& compressionVal, int width)
+void ImageData::readImageDataBinary(string& binaryData, const string& compressionVal)
 {
     string type = compressionType.find(compressionVal)->second;
 
     if (type == "Stored")
     {
-
+        cout << "INCOMPLETED COMPRESSION TYPE: " << type << endl;
+        exit(-1);
     }
 
     else if (type == "Fixed Huffman")
@@ -353,7 +354,7 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                                 loc++;
                             }
 
-                            if (loc == width*4+1)
+                            if (loc == imageWidth*4+1)
                             {
                                 loc = 0;
                             }
@@ -364,7 +365,7 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                         rgbLoc = 0;
                         for (auto& val : pixelData)
                         {
-                            if (loc % (width*4+1) == 0)
+                            if (loc % (imageWidth*4+1) == 0)
                             {
                                 loc++;
                                 continue;
@@ -480,7 +481,7 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                             {
                                 rgbLoc = 0;
                                 pixelLoc++;
-                                if (pixelLoc == width)
+                                if (pixelLoc == imageWidth)
                                 {
                                     firstBit = true;
                                 }
@@ -497,7 +498,7 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                         {
                             rgbLoc = 0;
                             pixelLoc++;
-                            if (pixelLoc == width)
+                            if (pixelLoc == imageWidth)
                             {
                                 firstBit = true;
                             }
@@ -519,12 +520,14 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
 
     else if (type == "Dynamic Huffman")
     {
-
+        cout << "INCOMPLETED COMPRESSION TYPE: " << type << endl;
+        exit(-1);
     }
 
     else if (type == "Reserved/Error")
     {
-
+        cout << "INCOMPLETED COMPRESSION TYPE: " << type << endl;
+        exit(-1);
     }
 
     else

@@ -95,8 +95,7 @@ struct ImageData
     /// <summary>Used to decode the IDAT data and store each pixels data within image(variable)</summary>
     /// <param name="binaryData">: The IDAT data to be read</param>
     /// <param name="compressionVal">: The compression value gained from huffmanSequence</param>
-    /// <param name="width">: Width of the image to identify the location of buffer symbols</param>
-    void readImageDataBinary(string& binaryData, const string& compressionVal, int width);
+    void readImageDataBinary(string& binaryData, const string& compressionVal);
 
     /// <summary>Prints out all the info of a chunk to the console</summary>
     void displayChunk(std::map<string, string>& chunk);
