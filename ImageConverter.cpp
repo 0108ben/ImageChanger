@@ -1,5 +1,6 @@
 #include "ImageConverter.hpp"
 
+#include <algorithm>
 #include <bits/local_lim.h>
 
 const std::unordered_map<int, string> ImageData::colourType =
@@ -86,11 +87,7 @@ void ImageData::getHexChunk(std::map<string, string>& chunk)
     getSmallHexChunk(CRC, 4);
     chunk["CRC"] = CRC;
 
-    if (chunkType == hextEXt)
-        getChunkData(chunk["data"], chunk["type"], chunk, getHexValue(chunkLength));
-
-    else
-        getChunkData(chunk["data"], chunk["type"], chunk);
+    getChunkData(chunk["data"], chunk["type"], chunk, getHexValue(chunkLength));
 }
 
 void ImageData::getSmallHexChunk(string& returnHex, const int length, int startingPoint)
@@ -172,6 +169,7 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
 
         getSmallHexChunk(height, chunk, 4, 4);
         chunkData["height"] = height;
+        imageHeight = getHexValue(height);
 
         getSmallHexChunk(bitDepth, chunk, 1, 8);
         chunkData["bitDepth"] = bitDepth;
@@ -212,7 +210,7 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
         chunkData["FLEVEL"] = FLG.substr(6, 2);
 
         // Get actual image data:
-        int dataLen = getSmallHexChunk(imageData, chunk, 0, 2, true);
+        getSmallHexChunk(imageData, chunk, dataLength-6, 2);
         chunkData["imageData"] = imageData;
 
         string binaryData = getHexBinary(imageData, true);
@@ -224,7 +222,7 @@ void ImageData::getChunkData(const string &chunk, const string &type, std::map<s
         chunkData["huffmanSequence"] = binaryData.substr(3);
         readImageDataBinary(chunkData["huffmanSequence"], chunkData["BTYPE"]);
 
-        getSmallHexChunk(adlerCheckSum, chunk, 4, dataLen+3); // data length + flg + null
+        getSmallHexChunk(adlerCheckSum, chunk, 4, dataLength-4); // data length + flg + null
         chunkData["adlerCheckSum"] = adlerCheckSum;
     }
 
@@ -372,7 +370,6 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                                     leftVal = pixelData[((imageWidth*4+1)*row) + loc - 4];
 
                                 val = (val + leftVal) % 256;
-                                loc++;
                             }
 
                             else if (buffer == 2)
@@ -388,7 +385,7 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                                 int leftVal;
                                 int upperVal;
 
-                                if (loc < 4)
+                                if (loc < 5)
                                     leftVal = 0;
                                 else
                                     leftVal = pixelData[((imageWidth*4+1)*row) + loc-4];
@@ -405,7 +402,7 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                                 {
                                     int upperLeftVal;
 
-                                    if (row == 0 || loc < 4)
+                                    if (row == 0 || loc < 5)
                                         upperLeftVal = 0;
                                     else
                                         upperLeftVal = pixelData[((row-1) * (imageWidth*4+1)) + loc-4];
@@ -419,14 +416,16 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                                     int paethUpLeft = abs(paeth - upperLeftVal);
 
                                     if (paethLeft <= paethUp && paethLeft <= paethUpLeft)
-                                        val = (val + paethLeft) % 256;
+                                        val = (val + leftVal) % 256;
                                     else if (paethUp <= paethUpLeft)
-                                        val = (val + paethUp) % 256;
+                                        val = (val + upperVal) % 256;
                                     else
-                                        val = (val + paethUpLeft) % 256;
+                                        val = (val + upperLeftVal) % 256;
                                 }
 
                             }
+
+                            loc++;
 
                             if (loc == imageWidth*4+1)
                             {
@@ -475,19 +474,20 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                             rgbLoc++;
                             loc++;
                         }
-
                         return;
                     }
 
                     cout << checkBits << " -> " << symbol << endl;
 
-                    if (firstBit)
+                    if (firstBit && !(symbol >= 257 && symbol <= 285))
                     {
                         pixelData.push_back(symbol);
                         firstBit = false;
+
+                        cout << symbol << endl;
                     }
 
-                    else if (code.bits == 7)
+                    else if (symbol >= 257 && symbol <= 285)
                     {
                         // Calculate length
 
@@ -503,7 +503,12 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
 
                             if (extraBits > 0)
                             {
-                                extraBitsVal = std::stoi(binaryData.substr(bitPos, extraBits), nullptr, 2);
+                                string extraBitsStr = binaryData.substr(bitPos, extraBits);
+                                std::reverse(extraBitsStr.begin(), extraBitsStr.end());
+                                cout << extraBitsStr << " -> ";
+                                extraBitsVal = std::stoi(extraBitsStr, nullptr, 2);
+                                cout << extraBitsVal << endl;
+
                                 bitPos += extraBits;
                             }
 
@@ -534,7 +539,12 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                             int extraBitsVal = 0;
                             if (extraBits > 0)
                             {
-                                extraBitsVal = std::stoi(binaryData.substr(bitPos, extraBits), nullptr, 2);
+                                string extraBitsStr = binaryData.substr(bitPos, extraBits);
+                                std::reverse(extraBitsStr.begin(), extraBitsStr.end());
+                                cout << extraBitsStr << " -> ";
+                                extraBitsVal = std::stoi(extraBitsStr, nullptr, 2);
+                                cout << extraBitsVal << endl;
+
                                 bitPos += extraBits;
                             }
 
@@ -551,8 +561,9 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                         {
                             repeat = pixelData[pixelData.size()-distance];
                             pixelData.push_back(repeat);
+                            cout << repeat << " ";
 
-                            if (firstBit)
+                            if (firstBit && i == 0)
                             {
                                 firstBit = false;
                                 continue;
@@ -570,6 +581,7 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                                 }
                             }
                         }
+                        cout << endl;
                     }
 
                     else
@@ -587,6 +599,8 @@ void ImageData::readImageDataBinary(string& binaryData, const string& compressio
                                 firstBit = true;
                             }
                         }
+
+                        cout << symbol << endl;
                     }
                     break;
                 }

@@ -62,6 +62,7 @@ struct ImageData
 
     string signature;
     int imageWidth{};
+    int imageHeight{};
     std::vector<int> pixelData;
     std::vector<Pixel> image;
 
